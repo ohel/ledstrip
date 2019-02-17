@@ -1,0 +1,77 @@
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+body {
+    background-color: black;
+    color: lightgray;
+    font-family: sans-serif;
+    text-align: center;
+}
+h1 {
+    font-size: 2rem;
+    margin-top: 30px;
+}
+#submitButton {
+    background-color: lightgrey;
+    color: black;
+}
+select, button {
+    font-size: 1rem;
+}
+</style>
+</head>
+<body>
+
+    <h1>LED Strip</h1>
+    <label>Select mode:</label>
+    <select id="modeSelect">
+        <option value="SINGLE_COLOR_TWINKLE">Twinkle</option>
+        <option value="SINGLE_COLOR_GLOW">Color glow</option>
+        <option value="REAL_WHITE_GLOW">Warm white glow</option>
+        <option value="REAL_WHITE_CONSTANT">Warm white constant</option>
+        <option value="MULTICOLOR_TWINKLE">Multicolor twinkle</option>
+        <option value="RGB_WHITE_CONSTANT">Cold white constant</option>
+        <option value="SINGLE_COLOR_BOUNCE">Bounce</option>
+    </select>
+    <button id="submitButton">Submit</button>
+
+<script>
+var submitButton = document.getElementById("submitButton");
+submitButton.addEventListener("click", postData);
+
+function postData() {
+
+    function resetButton() {
+        submitButton.style.backgroundColor="lightgrey";
+        submitButton.addEventListener("click", postData);
+    }
+
+    submitButton.removeEventListener("click", postData);
+    submitButton.style.backgroundColor="white";
+
+    var xhr = new XMLHttpRequest();
+
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState == XMLHttpRequest.DONE) {
+            submitButton.style.backgroundColor="gray";
+            setTimeout(resetButton, 500);
+        }
+    }
+
+    xhr.timeout = 2500;
+    xhr.ontimeout = function() {
+        submitButton.style.backgroundColor="red";
+        setTimeout(resetButton, 500);
+    }
+
+    xhr.open("POST", "/", true);
+
+    var post_data = "mode=" + document.getElementById("modeSelect").value;
+    xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+    xhr.send(post_data);
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,5 @@
+.pioenvs
+src/favicon.h
+src/index.h
+src/wificonfig.h
+web/*.cfg
