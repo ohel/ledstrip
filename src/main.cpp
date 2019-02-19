@@ -8,12 +8,14 @@
 #include "index.h"
 #include "favicon.h"
 
+extern "C" void write(uint8_t* led_data, uint32_t length);
+
 char* index_html = reinterpret_cast<char*>(&web_index_html[0]);
 char* favicon = reinterpret_cast<char*>(&web_favicon_ico[0]);
 
 ESP8266WebServer _server(80);
 
-const uint8_t _FIRST_LED_INDEX = 0;
+const uint8_t _FIRST_LED_INDEX = 1;
 const uint8_t _NUMBER_OF_LEDS = 51;
 const uint8_t _DATA_BYTE_LENGTH = _NUMBER_OF_LEDS * 4;
 float _max_current = 400; // mA
@@ -400,14 +402,12 @@ void setup() {
 
 }
 
-extern "C" void write( uint8_t* led_data, uint32_t length );
-
 void loop() {
 
     _server.handleClient();
     updateData();
 
-	write( _led_data, _DATA_BYTE_LENGTH );
+    write(_led_data, _DATA_BYTE_LENGTH);
 
     delay(_mode_data.interval);
 
