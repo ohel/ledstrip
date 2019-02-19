@@ -13,7 +13,7 @@ char* favicon = reinterpret_cast<char*>(&web_favicon_ico[0]);
 
 ESP8266WebServer _server(80);
 
-const uint8_t _FIRST_LED_INDEX = 1;
+const uint8_t _FIRST_LED_INDEX = 0;
 const uint8_t _NUMBER_OF_LEDS = 51;
 const uint8_t _DATA_BYTE_LENGTH = _NUMBER_OF_LEDS * 4;
 float _max_current = 400; // mA
@@ -400,30 +400,14 @@ void setup() {
 
 }
 
+extern "C" void write( uint8_t* led_data, uint32_t length );
+
 void loop() {
 
     _server.handleClient();
     updateData();
 
-    noInterrupts();
-    for (uint8_t* cursor = _led_data; cursor < _led_data + _DATA_BYTE_LENGTH; cursor++ ) {
-        for (int8_t bit = 7; bit >= 0; bit-- ) {
-            if ((*cursor & (1 << bit)) == 0) {
-                // Write zero; "manually inlined".
-                gpioUp();
-                nop_delay<15>();
-                gpioDown();
-                nop_delay<60>();
-            } else {
-                // Write one; "manually inlined".
-                gpioUp();
-                nop_delay<39>();
-                gpioDown();
-                nop_delay<36>();
-            }
-        }
-    }
-    interrupts();
+	write( _led_data, _DATA_BYTE_LENGTH );
 
     delay(_mode_data.interval);
 
