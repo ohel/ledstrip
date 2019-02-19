@@ -64,7 +64,8 @@ enum _MODE {
     RGB_WHITE_CONSTANT,
     SINGLE_COLOR_BOUNCE,
     SINGLE_COLOR_GLOW,
-    SINGLE_COLOR_TWINKLE
+    SINGLE_COLOR_TWINKLE,
+    OFF
 
 };
 _MODE _mode;
@@ -79,6 +80,7 @@ static _MODE getModeEnum(String s) {
     if (s == "SINGLE_COLOR_BOUNCE") { return _MODE::SINGLE_COLOR_BOUNCE; };
     if (s == "SINGLE_COLOR_GLOW") { return _MODE::SINGLE_COLOR_GLOW; };
     if (s == "SINGLE_COLOR_TWINKLE") { return _MODE::SINGLE_COLOR_TWINKLE; };
+    if (s == "OFF") { return _MODE::OFF; };
     return _mode;
 
 }
@@ -94,6 +96,7 @@ static String getModeString(_MODE m) {
         case SINGLE_COLOR_BOUNCE: return "SINGLE_COLOR_BOUNCE";
         case SINGLE_COLOR_GLOW: return "SINGLE_COLOR_GLOW";
         case SINGLE_COLOR_TWINKLE: return "SINGLE_COLOR_TWINKLE";
+        case OFF: return "OFF";
     }
     return "ERROR";
 
@@ -163,6 +166,12 @@ void switchMode(_MODE new_mode) {
     Serial.println(getModeString(_mode));
 
     switch (_mode) {
+
+        case OFF:
+            _mode_data.interval = 1000;
+            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+                setInitialLEDData(i, 0, 0, 0, 0);
+            }
 
         case SINGLE_COLOR_BOUNCE:
             _mode_data.interval = 25;
@@ -254,6 +263,9 @@ inline void updateData() {
     uint16_t sum = 0; // Assuming a maximum value of 255/LED * 4 LEDs/module * 60 modules = 61200.
 
     switch (_mode) {
+
+        case OFF:
+            break;
 
         case SINGLE_COLOR_BOUNCE:
             setLEDData(_mode_data.led_index, 0, 0, 0);
