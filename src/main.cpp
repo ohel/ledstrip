@@ -62,6 +62,7 @@ enum _MODE {
 
     MULTICOLOR_TWINKLE,
     REAL_WHITE_CONSTANT,
+    REAL_WHITE_CONSTANT_50, // Sometimes limiting brightness with PWM makes the LEDs flicker.
     REAL_WHITE_GLOW,
     RGB_WHITE_CONSTANT,
     SINGLE_COLOR_BOUNCE,
@@ -77,6 +78,7 @@ static _MODE getModeEnum(String s) {
 
     if (s == "MULTICOLOR_TWINKLE") { return _MODE::MULTICOLOR_TWINKLE; };
     if (s == "REAL_WHITE_CONSTANT") { return _MODE::REAL_WHITE_CONSTANT; };
+    if (s == "REAL_WHITE_CONSTANT_50") { return _MODE::REAL_WHITE_CONSTANT_50; };
     if (s == "REAL_WHITE_GLOW") { return _MODE::REAL_WHITE_GLOW; };
     if (s == "RGB_WHITE_CONSTANT") { return _MODE::RGB_WHITE_CONSTANT; };
     if (s == "SINGLE_COLOR_BOUNCE") { return _MODE::SINGLE_COLOR_BOUNCE; };
@@ -93,6 +95,7 @@ static String getModeString(_MODE m) {
     switch (m) {
         case MULTICOLOR_TWINKLE: return "MULTICOLOR_TWINKLE";
         case REAL_WHITE_CONSTANT: return "REAL_WHITE_CONSTANT";
+        case REAL_WHITE_CONSTANT_50: return "REAL_WHITE_CONSTANT_50";
         case REAL_WHITE_GLOW: return "REAL_WHITE_GLOW";
         case RGB_WHITE_CONSTANT: return "RGB_WHITE_CONSTANT";
         case SINGLE_COLOR_BOUNCE: return "SINGLE_COLOR_BOUNCE";
@@ -101,36 +104,6 @@ static String getModeString(_MODE m) {
         case OFF: return "OFF";
     }
     return "ERROR";
-
-}
-
-// To measure how many cycles operations take.
-static inline int32_t asm_ccount(void) {
-
-    int32_t r;
-    asm volatile ("rsr %0, ccount" : "=r"(r));
-    return r;
-
-}
-
-template<int T>
-inline void nop_delay() __attribute__((always_inline));
-
-// One nop is 12.5 ns @ 80 MHz.
-template<>
-void nop_delay<0>()
-{
-
-    asm volatile ( "nop":: );
-
-}
-
-template<int T>
-void nop_delay()
-{
-
-    asm volatile ( "nop":: );
-    nop_delay<T - 1>();
 
 }
 
@@ -239,9 +212,7 @@ void switchMode(_MODE new_mode) {
             break;
 
         case REAL_WHITE_CONSTANT:
-            _mode_data.interval = 1000;
-            break;
-
+        case REAL_WHITE_CONSTANT_50:
         case RGB_WHITE_CONSTANT:
             _mode_data.interval = 1000;
             break;
@@ -312,14 +283,21 @@ inline void updateData() {
             for (int n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++) {
                 setLEDData(n, 0, 0, 0, max_br);
             }
-            sum += (_NUMBER_OF_LEDS - _FIRST_LED_INDEX) * max_br;
+            sum = (_NUMBER_OF_LEDS - _FIRST_LED_INDEX) * max_br;
+            break;
+
+        case REAL_WHITE_CONSTANT_50:
+            for (int n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n += 2) {
+                setLEDData(n, 0, 0, 0, max_br);
+            }
+            sum = (_NUMBER_OF_LEDS - _FIRST_LED_INDEX) * max_br / 2;
             break;
 
         case RGB_WHITE_CONSTANT:
             for (int n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++) {
                 setLEDData(n, max_br, max_br, max_br, 0);
             }
-            sum += (_NUMBER_OF_LEDS - _FIRST_LED_INDEX) * 3 * max_br;
+            sum = (_NUMBER_OF_LEDS - _FIRST_LED_INDEX) * 3 * max_br;
             break;
     }
 
@@ -398,7 +376,7 @@ void setup() {
 
     setupWifi();
 
-    switchMode(REAL_WHITE_CONSTANT);
+    switchMode(REAL_WHITE_CONSTANT_50);
 
 }
 
@@ -406,9 +384,7 @@ void loop() {
 
     _server.handleClient();
     updateData();
-
     write(_led_data, _DATA_BYTE_LENGTH);
-
     delay(_mode_data.interval);
 
 }
