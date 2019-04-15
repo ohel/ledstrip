@@ -2,48 +2,106 @@
 <head>
 <meta charset="utf-8">
 <style>
+
 body {
     background-color: black;
     color: lightgray;
     font-family: sans-serif;
     text-align: center;
 }
+
 h1 {
     font-size: 2rem;
     margin-top: 30px;
 }
+
+p {
+    display: inline;
+    margin: 0;
+    vertical-align: center;
+}
+
 #submitButton {
     background-color: lightgrey;
     color: black;
 }
+
 select, button {
     font-size: 1rem;
 }
+
+#hue-selector, #lightness-selector {
+    height: 50px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 80%;
+}
+
+#hue-selector>span {
+    display: inline-block;
+    height: 100%;
+    width: 0.27%; /* 1/360 */
+}
+
+#lightness-selector>span {
+    display: inline-block;
+    height: 100%;
+    width: 0.972%; /* Make same width as hue selector. */
+}
+
+div.section {
+    margin: 10px;
+}
+
+#color-preview {
+    color: white;
+    display: inline-block;
+    height: 50px;
+    width: 50px;
+}
+
 </style>
 </head>
 <body>
 
     <h1>LED Strip</h1>
-    <label>Select mode:</label>
-    <select id="modeSelect">
-        <option value="SINGLE_COLOR_TWINKLE">Twinkle</option>
-        <option value="SINGLE_COLOR_GLOW">Color glow</option>
-        <option value="REAL_WHITE_GLOW">Warm white glow</option>
-        <option value="REAL_WHITE_CONSTANT">Warm white constant</option>
-        <option value="REAL_WHITE_CONSTANT_50">Warm white constant 50%</option>
-        <option value="MULTICOLOR_TWINKLE">Multicolor twinkle</option>
-        <option value="RGB_WHITE_CONSTANT">Cold white constant</option>
-        <option value="SINGLE_COLOR_BOUNCE">Bounce</option>
-        <option value="OFF">Off</option>
-    </select>
-    <button id="submitButton">Submit</button>
+
+    <div class="section">
+        <p>Select mode:</p>
+        <select id="modeSelect">
+            <option value="SINGLE_COLOR_CONSTANT">Static color</option>
+            <option value="SINGLE_COLOR_TWINKLE">Twinkle</option>
+            <option value="SINGLE_COLOR_GLOW">Color glow</option>
+            <option value="REAL_WHITE_GLOW">Warm white glow</option>
+            <option value="REAL_WHITE_CONSTANT">Static warm white</option>
+            <option value="REAL_WHITE_CONSTANT_50">Static warm white, ½ on, ½ off</option>
+            <option value="MULTICOLOR_TWINKLE">Multicolor twinkle</option>
+            <option value="RGB_WHITE_CONSTANT">Static cold white</option>
+            <option value="SINGLE_COLOR_BOUNCE">Bounce</option>
+            <option value="OFF">Off</option>
+        </select>
+    </div>
+
+    <div class="section">
+        <p>Color select:</p>
+        <button id="randomButton" onclick="randomColor()">Random</button>
+        <div id="hue-selector"></div>
+        <p>Lightness select:</p>
+        <div id="lightness-selector"></div>
+    </div>
+
+    <div class="section">
+        <p>Color preview:</p>
+        <div id="color-preview">?</div>
+    </div>
+
+    <div class="section">
+        <button id="submitButton" onclick="postData()">Submit</button>
+    </div>
 
 <script>
-var submitButton = document.getElementById("submitButton");
-submitButton.addEventListener("click", postData);
 
 function postData() {
-
     function resetButton() {
         submitButton.style.backgroundColor="lightgrey";
         submitButton.addEventListener("click", postData);
@@ -52,7 +110,7 @@ function postData() {
     submitButton.removeEventListener("click", postData);
     submitButton.style.backgroundColor="white";
 
-    var xhr = new XMLHttpRequest();
+    const xhr = new XMLHttpRequest();
 
     xhr.onreadystatechange = function() {
         if (xhr.readyState == XMLHttpRequest.DONE) {
@@ -69,10 +127,60 @@ function postData() {
 
     xhr.open("POST", "/", true);
 
-    var post_data = "mode=" + document.getElementById("modeSelect").value;
+    const color = getRGB(document.getElementById("color-preview").style.background);
+    const post_data = "mode=" + document.getElementById("modeSelect").value +
+        "&r=" + color.r +
+        "&g=" + color.g + 
+        "&b=" + color.b;
+
     xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
     xhr.send(post_data);
 }
+
+function randomColor() {
+    document.getElementById("color-preview").style.background = "black";
+    document.getElementById("color-preview").innerHTML = "?";
+}
+
+function getRGB(colorstr) {
+    const match = colorstr.match(/rgb\((\d{1,3}), ?(\d{1,3}), ?(\d{1,3})\)/);
+    return match ? {
+        r: parseInt(match[1]),
+        g: parseInt(match[2]),
+        b: parseInt(match[3])
+    } : { r: 0, g: 0, b: 0 };
+}
+
+function previewColor(color) {
+    document.getElementById("color-preview").style.background = color;
+    document.getElementById("color-preview").innerHTML = "";
+}
+
+for (let hue = 0; hue < 360; hue++) {
+    let hue_elem = document.createElement("span");
+    hue_elem.style.background = "hsl(" + hue.toString() + ", 100%, 50%)";
+    hue_elem.addEventListener("click", function() {
+        previewColor(hue_elem.style.background);
+        const lightnessSelector = document.getElementById("lightness-selector");
+        while (lightnessSelector.firstChild) {
+            lightnessSelector.firstChild.remove();
+        }
+        populateLightnessSelector(hue.toString());
+    });
+    document.getElementById("hue-selector").appendChild(hue_elem);
+}
+
+function populateLightnessSelector(hue) {
+    for (let l = 1; l < 101; l++) {
+        let l_elem = document.createElement("span");
+        l_elem.style.background = "hsl(" + hue + ", 100%, " + l.toString() + "%)";
+        l_elem.addEventListener("click", function() {
+            previewColor(l_elem.style.background);
+        });
+        document.getElementById("lightness-selector").appendChild(l_elem);
+    }
+}
+
 </script>
 
 </body>
