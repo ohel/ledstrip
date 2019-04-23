@@ -194,6 +194,7 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
             for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
                 setInitialLEDData(i, 0, 0, 0, 0);
             }
+            break;
 
         case SINGLE_COLOR_CONSTANT:
             _mode_data.interval = 1000;
