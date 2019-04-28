@@ -73,6 +73,7 @@ enum _MODE {
     SINGLE_COLOR_BOUNCE,
     SINGLE_COLOR_GLOW,
     SINGLE_COLOR_TWINKLE,
+    SINGLE_COLOR_SINGLE_TWINKLE,
     OFF
 
 };
@@ -90,6 +91,7 @@ static _MODE getModeEnum(String s) {
     if (s == "SINGLE_COLOR_BOUNCE") { return _MODE::SINGLE_COLOR_BOUNCE; };
     if (s == "SINGLE_COLOR_GLOW") { return _MODE::SINGLE_COLOR_GLOW; };
     if (s == "SINGLE_COLOR_TWINKLE") { return _MODE::SINGLE_COLOR_TWINKLE; };
+    if (s == "SINGLE_COLOR_SINGLE_TWINKLE") { return _MODE::SINGLE_COLOR_SINGLE_TWINKLE; };
     if (s == "OFF") { return _MODE::OFF; };
     return _mode;
 
@@ -108,6 +110,7 @@ static String getModeString(_MODE m) {
         case SINGLE_COLOR_BOUNCE: return "SINGLE_COLOR_BOUNCE";
         case SINGLE_COLOR_GLOW: return "SINGLE_COLOR_GLOW";
         case SINGLE_COLOR_TWINKLE: return "SINGLE_COLOR_TWINKLE";
+        case SINGLE_COLOR_SINGLE_TWINKLE: return "SINGLE_COLOR_SINGLE_TWINKLE";
         case OFF: return "OFF";
     }
     return "ERROR";
@@ -152,9 +155,13 @@ inline void scaleBrightness(uint16_t sum) {
 
 void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uint8_t w = 0) {
 
+    Serial.print("Switching mode to: ");
+    Serial.println(getModeString(_mode));
+
     uint8_t max_rgb;
     for (int i = 0; i < _NUMBER_OF_LEDS; i++ ) {
         setLEDData(i, 0, 0, 0, 0);
+        _mode_data.phase_offset[i] = 0;
     }
     _mode = new_mode;
     _mode_data.led_index = 0;
@@ -163,21 +170,11 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
     _mode_data.brightness = 1.0;
     uint16_t sum = 0;
 
-    Serial.print("Switching mode to: ");
-    Serial.println(getModeString(_mode));
-
     if (r != 0 || g != 0 || b != 0 || w != 0) {
-        Serial.print("Preferring given color: ");
-        Serial.print("   R: ");
-        Serial.println(r);
-        Serial.print("   G: ");
-        Serial.println(g);
-        Serial.print("   B: ");
-        Serial.println(b);
-        Serial.print("   W: ");
-        Serial.println(w);
+        Serial.println("Preferring given color: ");
         max_rgb = max(r, max(g, b));
     } else {
+        Serial.println("Using random color: ");
         r = random(256);
         g = random(256);
         b = random(256);
@@ -186,6 +183,14 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
         g = (uint8_t) g * 256.0 / max_rgb;
         b = (uint8_t) b * 256.0 / max_rgb;
     }
+    Serial.print("   R: ");
+    Serial.println(r);
+    Serial.print("   G: ");
+    Serial.println(g);
+    Serial.print("   B: ");
+    Serial.println(b);
+    Serial.print("   W: ");
+    Serial.println(w);
 
     switch (_mode) {
 
@@ -243,6 +248,16 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
             }
             break;
 
+        case SINGLE_COLOR_SINGLE_TWINKLE:
+            _mode_data.interval = 80;
+            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+                setInitialLEDData(i, r, g, b, 0);
+                setLEDData(i, 0, 0, 0, 0);
+                _mode_data.phase_offset[i] = 0.1;
+            }
+            _mode_data.led_index = (random(_NUMBER_OF_LEDS) + _FIRST_LED_INDEX) % _NUMBER_OF_LEDS;
+            break;
+
         case REAL_WHITE_CONSTANT:
             _mode_data.interval = 1000;
             for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
@@ -268,6 +283,7 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
             break;
     }
 
+    // If sum is constant, set it in the switch case above.
     scaleBrightness(sum);
     gpioDown();
     delay(1);
@@ -281,9 +297,9 @@ inline void updateData() {
     uint8_t b;
     uint8_t w;
     int i;
-
-    _mode_data.phase += 0.01;
+    double br;
     uint16_t sum = 0;
+    _mode_data.phase += 0.01;
 
     switch (_mode) {
 
@@ -307,7 +323,7 @@ inline void updateData() {
 
         case REAL_WHITE_GLOW:
             for (int n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++) {
-                double br = pow((float)sin(_mode_data.phase + _mode_data.phase_offset[n]), 6) * _mode_data.brightness;
+                br = pow((float)sin(_mode_data.phase + _mode_data.phase_offset[n]), 6) * _mode_data.brightness;
                 w = (uint8_t)(br * 255);
                 setLEDData(n, 0, 0, 0, w);
                 sum += w;
@@ -319,7 +335,7 @@ inline void updateData() {
         case SINGLE_COLOR_TWINKLE:
             for (int n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++) {
                 i = 4 * n;
-                double br = pow((float)sin(_mode_data.phase + _mode_data.phase_offset[n]), 6) * _mode_data.brightness;
+                br = pow((float)sin(_mode_data.phase + _mode_data.phase_offset[n]), 6) * _mode_data.brightness;
                 g = (uint8_t)(br * _mode_data.initial_data[i + 0]);
                 r = (uint8_t)(br * _mode_data.initial_data[i + 1]);
                 b = (uint8_t)(br * _mode_data.initial_data[i + 2]);
@@ -327,6 +343,23 @@ inline void updateData() {
                 setLEDData(n, r, g, b, w);
                 sum += r + g + b + w;
             }
+            break;
+
+        case SINGLE_COLOR_SINGLE_TWINKLE:
+            if (_mode_data.phase > PI) {
+                setLEDData(_mode_data.led_index, 0, 0, 0, 0);
+                _mode_data.phase = 0;
+                _mode_data.led_index = (random(_NUMBER_OF_LEDS) + _FIRST_LED_INDEX) % _NUMBER_OF_LEDS;
+            }
+
+            br = pow((float)sin(_mode_data.phase), 4) * _mode_data.brightness;
+            i = 4 * _mode_data.led_index;
+            g = (uint8_t)(br * _mode_data.initial_data[i + 0]);
+            r = (uint8_t)(br * _mode_data.initial_data[i + 1]);
+            b = (uint8_t)(br * _mode_data.initial_data[i + 2]);
+            w = (uint8_t)(br * _mode_data.initial_data[i + 3]);
+            setLEDData(_mode_data.led_index, r, g, b, w);
+            sum = r + g + b + w;
             break;
 
         case SINGLE_COLOR_CONSTANT:
