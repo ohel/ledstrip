@@ -13,13 +13,13 @@ extern "C" void write(uint8_t* led_data, uint32_t length);
 char* index_html = reinterpret_cast<char*>(&web_index_html[0]);
 char* favicon = reinterpret_cast<char*>(&web_favicon_ico[0]);
 
-ESP8266WebServer _server(80);
+ESP8266WebServer _SERVER(80);
 
 const uint8_t _FIRST_LED_INDEX = 0;
 const uint8_t _NUMBER_OF_LEDS = 60;
 const uint8_t _DATA_BYTE_LENGTH = _NUMBER_OF_LEDS * 4;
-float _max_current = 400; // mA
-uint32_t _max_led_sum = (uint32_t)(_max_current * 255.0 / 20); // S/255*20mA < I_max (mA)
+const float _MAX_CURRENT = 400; // mA
+const uint32_t _MAX_LED_SUM = (uint32_t)(_MAX_CURRENT * 255.0 / 20); // S/255*20mA < I_max (mA)
 
 uint8_t _led_data[_DATA_BYTE_LENGTH] = { 0 };
 
@@ -65,6 +65,7 @@ const int _GPIO_PIN = 0;
 enum _MODE {
 
     MULTICOLOR_TWINKLE,
+    MULTICOLOR_SINGLE_TWINKLE,
     REAL_WHITE_CONSTANT,
     REAL_WHITE_CONSTANT_50, // Sometimes limiting brightness with PWM makes the LEDs flicker.
     REAL_WHITE_GLOW,
@@ -83,6 +84,7 @@ _MODE _mode;
 static _MODE getModeEnum(String s) {
 
     if (s == "MULTICOLOR_TWINKLE") { return _MODE::MULTICOLOR_TWINKLE; };
+    if (s == "MULTICOLOR_SINGLE_TWINKLE") { return _MODE::MULTICOLOR_SINGLE_TWINKLE; };
     if (s == "REAL_WHITE_CONSTANT") { return _MODE::REAL_WHITE_CONSTANT; };
     if (s == "REAL_WHITE_CONSTANT_50") { return _MODE::REAL_WHITE_CONSTANT_50; };
     if (s == "REAL_WHITE_GLOW") { return _MODE::REAL_WHITE_GLOW; };
@@ -102,6 +104,7 @@ static String getModeString(_MODE m) {
 
     switch (m) {
         case MULTICOLOR_TWINKLE: return "MULTICOLOR_TWINKLE";
+        case MULTICOLOR_SINGLE_TWINKLE: return "MULTICOLOR_SINGLE_TWINKLE";
         case REAL_WHITE_CONSTANT: return "REAL_WHITE_CONSTANT";
         case REAL_WHITE_CONSTANT_50: return "REAL_WHITE_CONSTANT_50";
         case REAL_WHITE_GLOW: return "REAL_WHITE_GLOW";
@@ -136,8 +139,8 @@ void gpioDown() {
 // scale brightness based on LED brightness sum so that current stays within limits.
 inline void scaleBrightness(uint16_t sum) {
 
-    if (sum > _max_led_sum) {
-        float new_brightness = _max_led_sum / (float)sum;
+    if (sum > _MAX_LED_SUM) {
+        float new_brightness = _MAX_LED_SUM / (float)sum;
         if (new_brightness < _mode_data.brightness) {
             Serial.print("Scaling brightness to: ");
             Serial.println(new_brightness);
@@ -153,12 +156,22 @@ inline void scaleBrightness(uint16_t sum) {
 
 }
 
+void randomColor(uint8_t &r, uint8_t &g, uint8_t &b) {
+    uint8_t max_rgb;
+    r = random(256);
+    g = random(256);
+    b = random(256);
+    max_rgb = max(r, max(g, b));
+    r = (uint8_t) r * 256.0 / max_rgb;
+    g = (uint8_t) g * 256.0 / max_rgb;
+    b = (uint8_t) b * 256.0 / max_rgb;
+}
+
 void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uint8_t w = 0) {
 
     Serial.print("Switching mode to: ");
     Serial.println(getModeString(_mode));
 
-    uint8_t max_rgb;
     for (int i = 0; i < _NUMBER_OF_LEDS; i++ ) {
         setLEDData(i, 0, 0, 0, 0);
         _mode_data.phase_offset[i] = 0;
@@ -172,25 +185,14 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
 
     if (r != 0 || g != 0 || b != 0 || w != 0) {
         Serial.println("Preferring given color: ");
-        max_rgb = max(r, max(g, b));
     } else {
         Serial.println("Using random color: ");
-        r = random(256);
-        g = random(256);
-        b = random(256);
-        max_rgb = max(r, max(g, b));
-        r = (uint8_t) r * 256.0 / max_rgb;
-        g = (uint8_t) g * 256.0 / max_rgb;
-        b = (uint8_t) b * 256.0 / max_rgb;
+        randomColor(r, g, b);
     }
-    Serial.print("   R: ");
-    Serial.println(r);
-    Serial.print("   G: ");
-    Serial.println(g);
-    Serial.print("   B: ");
-    Serial.println(b);
-    Serial.print("   W: ");
-    Serial.println(w);
+    Serial.print("   R: "); Serial.println(r);
+    Serial.print("   G: "); Serial.println(g);
+    Serial.print("   B: "); Serial.println(b);
+    Serial.print("   W: "); Serial.println(w);
 
     switch (_mode) {
 
@@ -248,12 +250,16 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
             }
             break;
 
+        case MULTICOLOR_SINGLE_TWINKLE:
         case SINGLE_COLOR_SINGLE_TWINKLE:
-            _mode_data.interval = 80;
+            _mode_data.interval = 100;
             for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+                if (_mode == MULTICOLOR_SINGLE_TWINKLE) {
+                    randomColor(r, g, b);
+                }
                 setInitialLEDData(i, r, g, b, 0);
                 setLEDData(i, 0, 0, 0, 0);
-                _mode_data.phase_offset[i] = 0.1;
+                _mode_data.phase_offset[i] = PI * 0.01 * random(1001);
             }
             _mode_data.led_index = (random(_NUMBER_OF_LEDS) + _FIRST_LED_INDEX) % _NUMBER_OF_LEDS;
             break;
@@ -334,8 +340,8 @@ inline void updateData() {
         case MULTICOLOR_TWINKLE:
         case SINGLE_COLOR_TWINKLE:
             for (int n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++) {
-                i = 4 * n;
                 br = pow((float)sin(_mode_data.phase + _mode_data.phase_offset[n]), 6) * _mode_data.brightness;
+                i = 4 * n;
                 g = (uint8_t)(br * _mode_data.initial_data[i + 0]);
                 r = (uint8_t)(br * _mode_data.initial_data[i + 1]);
                 b = (uint8_t)(br * _mode_data.initial_data[i + 2]);
@@ -345,21 +351,28 @@ inline void updateData() {
             }
             break;
 
+        case MULTICOLOR_SINGLE_TWINKLE:
         case SINGLE_COLOR_SINGLE_TWINKLE:
-            if (_mode_data.phase > PI) {
-                setLEDData(_mode_data.led_index, 0, 0, 0, 0);
-                _mode_data.phase = 0;
-                _mode_data.led_index = (random(_NUMBER_OF_LEDS) + _FIRST_LED_INDEX) % _NUMBER_OF_LEDS;
+            for (int n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++) {
+                _mode_data.phase_offset[n] += 0.01;
+                if (_mode_data.phase_offset[n] > 10 * PI) {
+                    if (_mode == MULTICOLOR_SINGLE_TWINKLE) {
+                        randomColor(r, g, b);
+                        setInitialLEDData(n, r, g, b, 0);
+                    }
+                    _mode_data.phase_offset[n] = PI * 0.01 * random(501);
+                    setLEDData(n, 0, 0, 0, 0);
+                } else if (_mode_data.phase_offset[n] > 9 * PI) {
+                    br = pow((float)sin(_mode_data.phase_offset[n]), 4) * _mode_data.brightness;
+                    i = 4 * n;
+                    g = (uint8_t)(br * _mode_data.initial_data[i + 0]);
+                    r = (uint8_t)(br * _mode_data.initial_data[i + 1]);
+                    b = (uint8_t)(br * _mode_data.initial_data[i + 2]);
+                    w = (uint8_t)(br * _mode_data.initial_data[i + 3]);
+                    setLEDData(n, r, g, b, w);
+                    sum += r + g + b + w;
+                }
             }
-
-            br = pow((float)sin(_mode_data.phase), 4) * _mode_data.brightness;
-            i = 4 * _mode_data.led_index;
-            g = (uint8_t)(br * _mode_data.initial_data[i + 0]);
-            r = (uint8_t)(br * _mode_data.initial_data[i + 1]);
-            b = (uint8_t)(br * _mode_data.initial_data[i + 2]);
-            w = (uint8_t)(br * _mode_data.initial_data[i + 3]);
-            setLEDData(_mode_data.led_index, r, g, b, w);
-            sum = r + g + b + w;
             break;
 
         case SINGLE_COLOR_CONSTANT:
@@ -403,27 +416,27 @@ void setupWifi() {
         Serial.println(WiFi.localIP());
     }
 
-    _server.on("/", HTTP_GET, [](){
+    _SERVER.on("/", HTTP_GET, [](){
         Serial.println("GET: /");
-        _server.send(200, "text/html", index_html);
+        _SERVER.send(200, "text/html", index_html);
     });
-    _server.on("/favicon.ico", HTTP_GET, [](){
+    _SERVER.on("/favicon.ico", HTTP_GET, [](){
         Serial.println("GET: /favicon.ico");
-        _server.send_P(200, "image/x-icon", favicon, web_favicon_ico_len);
+        _SERVER.send_P(200, "image/x-icon", favicon, web_favicon_ico_len);
     });
-    _server.on("/", HTTP_POST, [](){
+    _SERVER.on("/", HTTP_POST, [](){
         Serial.println("POST: /");
-        _server.send(200, "text/plain", "");
-        String mode = _server.arg("mode");
-        uint8_t r = (uint8_t) _server.arg("r").toInt();
-        uint8_t g = (uint8_t) _server.arg("g").toInt();
-        uint8_t b = (uint8_t) _server.arg("b").toInt();
+        _SERVER.send(200, "text/plain", "");
+        String mode = _SERVER.arg("mode");
+        uint8_t r = (uint8_t) _SERVER.arg("r").toInt();
+        uint8_t g = (uint8_t) _SERVER.arg("g").toInt();
+        uint8_t b = (uint8_t) _SERVER.arg("b").toInt();
         Serial.print("Request mode: ");
         Serial.println(mode);
         switchMode(getModeEnum(mode), r, g, b);
     });
 
-    _server.begin();
+    _SERVER.begin();
     Serial.println("Server is running.");
 
 }
@@ -441,7 +454,7 @@ void setup() {
 
 void loop() {
 
-    _server.handleClient();
+    _SERVER.handleClient();
     updateData();
     write(_led_data, _DATA_BYTE_LENGTH);
     delay(_mode_data.interval);
