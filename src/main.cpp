@@ -8,15 +8,22 @@
 #include "index.h"
 #include "favicon.h"
 
+#include "ledsetup.h"
+#ifndef _LED_SETUP
+// For different kinds of LED strip setups, put the next three lines in ledsetup.h.
+#define _LED_SETUP
+const uint8_t _FIRST_LED_INDEX = 0;
+const uint8_t _NUMBER_OF_LEDS = 60;
+#endif
+
 extern "C" void write(uint8_t* led_data, uint32_t length);
 
-char* index_html = reinterpret_cast<char*>(&web_index_html[0]);
-char* favicon = reinterpret_cast<char*>(&web_favicon_ico[0]);
+const char* _INDEX_HTML = reinterpret_cast<char*>(&web_index_html[0]);
+const char* _FAVICON = reinterpret_cast<char*>(&web_favicon_ico[0]);
+const unsigned int _WEB_FAVICON_LEN = web_favicon_ico_len;
 
 ESP8266WebServer _SERVER(80);
 
-const uint8_t _FIRST_LED_INDEX = 0;
-const uint8_t _NUMBER_OF_LEDS = 60;
 const uint8_t _DATA_BYTE_LENGTH = _NUMBER_OF_LEDS * 4;
 const float _MAX_CURRENT = 400; // mA
 const uint32_t _MAX_LED_SUM = (uint32_t)(_MAX_CURRENT * 255.0 / 20); // S/255*20mA < I_max (mA)
@@ -261,7 +268,6 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
                 setLEDData(i, 0, 0, 0, 0);
                 _mode_data.phase_offset[i] = PI * 0.01 * random(1001);
             }
-            _mode_data.led_index = (random(_NUMBER_OF_LEDS) + _FIRST_LED_INDEX) % _NUMBER_OF_LEDS;
             break;
 
         case REAL_WHITE_CONSTANT:
@@ -393,18 +399,18 @@ void setupWifi() {
     WiFi.mode(WIFI_STA);
 
     Serial.println("");
-    if (ip == INADDR_NONE) {
+    if (_WIFI_IP == INADDR_NONE) {
         Serial.println("Using dynamic IP address.");
     } else {
         Serial.print("Using static IP address: ");
-        Serial.println(ip.toString());
-        WiFi.config(ip, gateway, subnet);
+        Serial.println(_WIFI_IP.toString());
+        WiFi.config(_WIFI_IP, _WIFI_GATEWAY, subnet);
     }
 
-    WiFi.begin(ssid, password);
+    WiFi.begin(_WIFI_SSID, _WIFI_PASSWORD);
     int timeout = 0;
     Serial.print("Connecting to: ");
-    Serial.println(ssid);
+    Serial.println(_WIFI_SSID);
     while (WiFi.status() != WL_CONNECTED && timeout < 10) {
         delay(1000);
         Serial.print(".");
@@ -418,11 +424,11 @@ void setupWifi() {
 
     _SERVER.on("/", HTTP_GET, [](){
         Serial.println("GET: /");
-        _SERVER.send(200, "text/html", index_html);
+        _SERVER.send(200, "text/html", _INDEX_HTML);
     });
-    _SERVER.on("/favicon.ico", HTTP_GET, [](){
-        Serial.println("GET: /favicon.ico");
-        _SERVER.send_P(200, "image/x-icon", favicon, web_favicon_ico_len);
+    _SERVER.on("/_FAVICON.ico", HTTP_GET, [](){
+        Serial.println("GET: /_FAVICON.ico");
+        _SERVER.send_P(200, "image/x-icon", _FAVICON, _WEB_FAVICON_LEN);
     });
     _SERVER.on("/", HTTP_POST, [](){
         Serial.println("POST: /");

@@ -1,5 +1,6 @@
 .pioenvs
 src/favicon.h
 src/index.h
+src/ledsetup.h
 src/wificonfig.h
 web/*.cfg
