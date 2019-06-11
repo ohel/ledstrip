@@ -23,12 +23,19 @@ p {
     vertical-align: middle;
 }
 
-#submitButton {
+#mode-selector {
+    width: 80%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+#mode-selector>button{
     background-color: lightgrey;
     border-radius: 10px;
     border-style: none;
     color: black;
     padding: 10px 50px;
+    margin: 10px 7px;
 }
 
 select, button {
@@ -65,7 +72,8 @@ div.section {
     border-width: 1px;
     color: white;
     display: inline-block;
-    height: 1em;
+    height: 50px;
+    line-height: 50px;
     vertical-align: middle;
     width: 100px;
 }
@@ -77,26 +85,7 @@ div.section {
     <h1>__LEDSTRIP__</h1>
 
     <div class="section">
-        <p>Select mode:</p>
-        <select id="modeSelect">
-            <option value="SINGLE_COLOR_CONSTANT">Static color</option>
-            <option value="SINGLE_COLOR_TWINKLE">Twinkle</option>
-            <option value="SINGLE_COLOR_SINGLE_TWINKLE">Starry Night</option>
-            <option value="SINGLE_COLOR_GLOW">Color glow</option>
-            <option value="REAL_WHITE_GLOW">Warm white glow</option>
-            <option value="REAL_WHITE_CONSTANT">Static warm white</option>
-            <option value="REAL_WHITE_CONSTANT_50">Static warm white, ½ on, ½ off</option>
-            <option value="MULTICOLOR_TWINKLE">Multicolor twinkle</option>
-            <option value="MULTICOLOR_SINGLE_TWINKLE">Multicolor Starry Night</option>
-            <option value="RGB_WHITE_CONSTANT">Static cold white</option>
-            <option value="SINGLE_COLOR_BOUNCE">Bounce</option>
-            <option value="OFF">Off</option>
-        </select>
-    </div>
-
-    <div class="section">
         <p>Color select:</p>
-        <button id="randomButton" onclick="randomColor()">Random</button>
         <div id="hue-selector"></div>
         <p>Lightness select:</p>
         <div id="lightness-selector"></div>
@@ -105,45 +94,67 @@ div.section {
     <div class="section">
         <p>Color preview:</p>
         <div id="color-preview">?</div>
+        <button id="randomButton" onclick="randomColor()">Random</button>
     </div>
 
     <div class="section">
-        <button id="submitButton" onclick="postData()">Submit</button>
+        <p>Select mode:</p>
+        <div id="mode-selector">
+            <button id="SINGLE_COLOR_CONSTANT">Static color</button>
+            <button id="SINGLE_COLOR_TWINKLE">Twinkle</button>
+            <button id="SINGLE_COLOR_SINGLE_TWINKLE">Starry Night</button>
+            <button id="SINGLE_COLOR_GLOW">Color glow</button>
+            <button id="REAL_WHITE_GLOW">Warm white glow</button>
+            <button id="REAL_WHITE_CONSTANT">Static warm white</button>
+            <button id="REAL_WHITE_CONSTANT_50">Static warm white, ½ on, ½ off</button>
+            <button id="MULTICOLOR_TWINKLE">Multicolor twinkle</button>
+            <button id="MULTICOLOR_SINGLE_TWINKLE">Multicolor Starry Night</button>
+            <button id="RGB_WHITE_CONSTANT">Static cold white</button>
+            <button id="SINGLE_COLOR_BOUNCE">Bounce</button>
+            <button id="OFF">Off</button>
+        </div>
     </div>
 
 <script>
 
-function postData() {
-    function resetButton() {
-        submitButton.style.backgroundColor="lightgrey";
-        submitButton.addEventListener("click", postData);
+document.addEventListener("DOMContentLoaded", function(event) {
+    const buttonContainer = document.getElementById("mode-selector");
+    Array.from(buttonContainer.children).forEach((child, index) => {
+        if (child.tagName.toLowerCase() === "button") {
+            child.addEventListener("click", () => postData(child));
+        }
+    });
+});
+
+function postData(button) {
+    function resetButton(button) {
+        button.style.backgroundColor="lightgrey";
+        button.addEventListener("click", postData);
     }
 
-    submitButton.removeEventListener("click", postData);
-    submitButton.style.backgroundColor="white";
+    button.removeEventListener("click", postData);
+    button.style.backgroundColor="white";
 
     const xhr = new XMLHttpRequest();
 
     xhr.onreadystatechange = function() {
         if (xhr.readyState == XMLHttpRequest.DONE) {
-            submitButton.style.backgroundColor="gray";
-            setTimeout(resetButton, 500);
+            button.style.backgroundColor="gray";
+            setTimeout(() => resetButton(button), 500);
         }
     }
 
     xhr.timeout = 2500;
     xhr.ontimeout = function() {
-        submitButton.style.backgroundColor="red";
-        setTimeout(resetButton, 500);
+        button.style.backgroundColor="red";
+        setTimeout(() => resetButton(button), 500);
     }
 
     xhr.open("POST", "/", true);
 
     const color = getRGBFromElementBackground(document.getElementById("color-preview"));
-    const post_data = "mode=" + document.getElementById("modeSelect").value +
-        "&r=" + color.r +
-        "&g=" + color.g +
-        "&b=" + color.b;
+    const mode = (button.getAttribute("id"));
+    const post_data = "mode=" + mode + "&r=" + color.r + "&g=" + color.g + "&b=" + color.b;
 
     xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
     xhr.send(post_data);
