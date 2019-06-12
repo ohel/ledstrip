@@ -23,6 +23,10 @@ p {
     vertical-align: middle;
 }
 
+button {
+    font-size: 1rem;
+}
+
 #mode-selector {
     width: 80%;
     margin-left: auto;
@@ -38,28 +42,19 @@ p {
     margin: 10px 7px;
 }
 
-select, button {
-    font-size: 1rem;
-}
-
-#hue-selector, #lightness-selector {
-    height: 50px;
+#hue-selector {
+    height: 500px;
     margin-bottom: 2em;
     margin-left: auto;
     margin-right: auto;
-    margin-top: 5px;
+    margin-top: 1em;
     width: 80%;
 }
 
-#hue-selector>span {
+#hue-selector>div {
     display: inline-block;
     height: 100%;
     width: 0.27%; /* 1/360 */
-}
-
-#lightness-selector>span {
-    display: inline-block;
-    height: 100%;
 }
 
 div.section {
@@ -87,18 +82,16 @@ div.section {
     <div class="section">
         <p>Color select:</p>
         <div id="hue-selector"></div>
-        <p>Lightness select:</p>
-        <div id="lightness-selector"></div>
     </div>
 
     <div class="section">
         <p>Color preview:</p>
         <div id="color-preview">?</div>
-        <button id="randomButton" onclick="randomColor()">Random</button>
+        <button id="random-button" onclick="randomColor()">🡄 ?</button>
     </div>
 
     <div class="section">
-        <p>Select mode:</p>
+        <p>Mode select:</p>
         <div id="mode-selector">
             <button id="SINGLE_COLOR_CONSTANT">Static color</button>
             <button id="SINGLE_COLOR_TWINKLE">Twinkle</button>
@@ -121,18 +114,24 @@ document.addEventListener("DOMContentLoaded", function(event) {
     const buttonContainer = document.getElementById("mode-selector");
     Array.from(buttonContainer.children).forEach((child, index) => {
         if (child.tagName.toLowerCase() === "button") {
-            child.addEventListener("click", () => postData(child));
+            child.addEventListener("click", () => selectMode(child));
         }
     });
+
+    for (let hue = 0; hue < 360; hue++) {
+        let hue_elem = document.createElement("div");
+        createLightnessScale(hue.toString(), hue_elem);
+        document.getElementById("hue-selector").appendChild(hue_elem);
+    }
 });
 
-function postData(button) {
+function selectMode(button) {
     function resetButton(button) {
         button.style.backgroundColor="lightgrey";
-        button.addEventListener("click", postData);
+        button.disabled = false;
     }
 
-    button.removeEventListener("click", postData);
+    button.disabled = true;
     button.style.backgroundColor="white";
 
     const xhr = new XMLHttpRequest();
@@ -181,30 +180,25 @@ function previewColor(color) {
     document.getElementById("color-preview").innerHTML = "";
 }
 
-for (let hue = 0; hue < 360; hue++) {
-    let hue_elem = document.createElement("span");
-    hue_elem.style.background = "hsl(" + hue.toString() + ", 100%, 50%)";
-    hue_elem.addEventListener("click", function() {
-        previewColor(hue_elem.style.background);
-        const lightnessSelector = document.getElementById("lightness-selector");
-        while (lightnessSelector.firstChild) {
-            lightnessSelector.firstChild.remove();
-        }
-        populateLightnessSelector(hue.toString());
-    });
-    document.getElementById("hue-selector").appendChild(hue_elem);
+function createLightnessElement(hue, lightness) {
+    let l_elem = document.createElement("div");
+    l_elem.style.background = "hsl(" + hue + ", 100%, " + lightness.toString() + "%)";
+    l_elem.style.height = ((50-lightness)/50+3.46).toString() + "%";
+    l_elem.addEventListener("click", () => previewColor(l_elem.style.background));
+    return l_elem;
 }
 
-function populateLightnessSelector(hue) {
-    const base_width = 0.972; // 360/100*hue_elem.width
-    for (let l = 1; l < 101; l++) {
-        let l_elem = document.createElement("span");
-        l_elem.style.background = "hsl(" + hue + ", 100%, " + l.toString() + "%)";
-        l_elem.style.width = ((50-l)/51+base_width).toString() + "%";
-        l_elem.addEventListener("click", function() {
-            previewColor(l_elem.style.background);
-        });
-        document.getElementById("lightness-selector").appendChild(l_elem);
+function createLightnessScale(hue, elem) {
+    for (let l = 1; l <= 49; l+=4) {
+        elem.appendChild(createLightnessElement(hue, l));
+    }
+    let l_elem = document.createElement("div");
+    l_elem.style.background = "hsl(" + hue + ", 100%, 50%)";
+    l_elem.style.height = "10%";
+    l_elem.addEventListener("click", () => previewColor(l_elem.style.background));
+    elem.appendChild(l_elem);
+    for (let l = 51; l <= 99; l+=4) {
+        elem.appendChild(createLightnessElement(hue, l));
     }
 }
 
