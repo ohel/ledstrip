@@ -18,22 +18,14 @@ h1 {
 }
 
 p {
-    display: inline;
+    display: block;
     margin: 0;
     vertical-align: middle;
+    font-size: 2rem;
 }
 
 button {
     font-size: 1rem;
-}
-
-#mode-selector {
-    width: 80%;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-#mode-selector>button{
     background-color: lightgrey;
     border-radius: 10px;
     border-style: none;
@@ -42,13 +34,29 @@ button {
     margin: 10px 7px;
 }
 
+#random-indicator {
+    font-size: 2rem;
+}
+
+.random-button {
+    font-size: 2rem;
+    padding: 0px 10px;
+    vertical-align: middle;
+}
+
+#mode-selector {
+    width: 95%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
 #hue-selector {
     height: 500px;
     margin-bottom: 2em;
     margin-left: auto;
     margin-right: auto;
     margin-top: 1em;
-    width: 80%;
+    width: 95%;
 }
 
 #hue-selector>div {
@@ -80,18 +88,21 @@ div.section {
     <h1>__LEDSTRIP__</h1>
 
     <div class="section">
-        <p>Color select:</p>
+        <p>🎨</p>
         <div id="hue-selector"></div>
     </div>
 
     <div class="section">
-        <p>Color preview:</p>
-        <div id="color-preview">?</div>
-        <button id="random-button" onclick="randomColor()">🡄 ?</button>
+        <p>👁️</p>
+        <button class="random-button" style="visibility: hidden;">🎲</button>
+        <div id="color-preview">
+            <span id="random-indicator">?</span>
+        </div>
+        <button class="random-button" onclick="randomColor()">🎲</button>
     </div>
 
     <div class="section">
-        <p>Mode select:</p>
+        <p>⚙️</p>
         <div id="mode-selector">
             <button id="SINGLE_COLOR_CONSTANT">Static color</button>
             <button id="SINGLE_COLOR_TWINKLE">Twinkle</button>
@@ -161,7 +172,7 @@ function selectMode(button) {
 
 function randomColor() {
     document.getElementById("color-preview").style.background = "black";
-    document.getElementById("color-preview").innerHTML = "?";
+    document.getElementById("random-indicator").style.visibility = "visible";
 }
 
 function getRGBFromElementBackground(elem) {
@@ -177,13 +188,13 @@ function getRGBFromElementBackground(elem) {
 
 function previewColor(color) {
     document.getElementById("color-preview").style.background = color;
-    document.getElementById("color-preview").innerHTML = "";
+    document.getElementById("random-indicator").style.visibility = "hidden";
 }
 
 function createLightnessElement(hue, lightness) {
     let l_elem = document.createElement("div");
     l_elem.style.background = "hsl(" + hue + ", 100%, " + lightness.toString() + "%)";
-    l_elem.style.height = ((50-lightness)/50+3.46).toString() + "%";
+    l_elem.style.height = (2*(50-lightness)/50+3.46).toString() + "%";
     l_elem.addEventListener("click", () => previewColor(l_elem.style.background));
     return l_elem;
 }
