@@ -3,6 +3,7 @@
 
 #include "ESP8266WiFi.h"
 #include "ESP8266WebServer.h"
+#include "ESP8266mDNS.h"
 
 #include "wificonfig.h"
 #include "index.h"
@@ -444,6 +445,12 @@ void setupWifi() {
 
     _SERVER.begin();
     Serial.println("Server is running.");
+
+    if (!MDNS.begin(_WIFI_MDNS)) {
+        Serial.println("Failed to start mDNS responder.");
+    } else {
+        Serial.println("Started mDNS responder.");
+    }
 
 }
 
