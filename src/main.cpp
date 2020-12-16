@@ -9,13 +9,15 @@
 #include "index.h"
 #include "favicon.h"
 
+// For different kinds of LED strip setups, define the following three constants in ledsetup.h.
+// The first LED index is normally 0, but if using the "sacrificial LED" technique to boost the IO voltage, it's 1.
+// A current limit of 400mA is usually tolerable by D1 mini powered via USB. For higher values, power it directly from the 5V line.
 #include "ledsetup.h"
 #ifndef _LED_SETUP
-// For different kinds of LED strip setups, put the next three lines in ledsetup.h.
-// The first LED index is normally 0, but if using the "sacrificial LED" technique to boost the IO voltage, it's 1.
 #define _LED_SETUP
 const uint8_t _FIRST_LED_INDEX = 0;
 const uint8_t _NUMBER_OF_LEDS = 60;
+const float _CURRENT_LIMIT_MA = 400;
 #endif
 
 extern "C" void write(uint8_t* led_data, uint32_t length);
@@ -27,8 +29,9 @@ const unsigned int _WEB_FAVICON_LEN = web_favicon_ico_len;
 ESP8266WebServer _SERVER(80);
 
 const uint8_t _DATA_BYTE_LENGTH = _NUMBER_OF_LEDS * 4;
-const float _MAX_CURRENT = 400; // mA
-const uint32_t _MAX_LED_SUM = (uint32_t)(_MAX_CURRENT * 255.0 / 20); // S/255*20mA < I_max (mA)
+// LED_SUM is the sum of all LED values (on a scale 0-255), so e.g. for 4 LEDs/module, 60 modules/strip the maximum sum is 255*4*60=61200.
+// Assuming for each LED the current is 20mA, calculate the safe limit for LED sum based on current limit.
+const uint32_t _LED_SUM_LIMIT = (uint32_t)(_CURRENT_LIMIT_MA * 255.0 / 20); // LED_SUM/255*20mA < I_limit (mA)
 
 uint8_t _led_data[_DATA_BYTE_LENGTH] = { 0 };
 
@@ -129,6 +132,29 @@ static String getModeString(_MODE m) {
 
 }
 
+// Return info on whether a mode uses a specific color value or not.
+static bool modeUsesSpecificColor(_MODE m) {
+
+    switch (m) {
+        case MULTICOLOR_TWINKLE:
+        case MULTICOLOR_SINGLE_TWINKLE:
+        case REAL_WHITE_CONSTANT:
+        case REAL_WHITE_CONSTANT_50:
+        case REAL_WHITE_GLOW:
+        case RGB_WHITE_CONSTANT:
+        case OFF:
+            return false;
+        case SINGLE_COLOR_CONSTANT:
+        case SINGLE_COLOR_BOUNCE:
+        case SINGLE_COLOR_GLOW:
+        case SINGLE_COLOR_TWINKLE:
+        case SINGLE_COLOR_SINGLE_TWINKLE:
+            return true;
+    }
+    return false;
+
+}
+
 // Writing the PIN register takes 9 cycles = 112.5 ns @ 80 MHz.
 inline void gpioUp() __attribute__((always_inline));
 void gpioUp() {
@@ -144,14 +170,13 @@ void gpioDown() {
 
 }
 
-// Assuming a maximum value of 255/LED * 4 LEDs/module * 60 modules = 61200,
-// scale brightness based on LED brightness sum so that current stays within limits.
+// Scale brightness based on LED brightness sum so that current stays within limits.
 inline void scaleBrightness(uint16_t sum) {
 
-    if (sum > _MAX_LED_SUM) {
-        float new_brightness = _MAX_LED_SUM / (float)sum;
+    if (sum > _LED_SUM_LIMIT) {
+        float new_brightness = _LED_SUM_LIMIT / (float)sum;
         if (new_brightness < _mode_data.brightness) {
-            Serial.print("Scaling brightness to: ");
+            Serial.print("Current limit scaling brightness to: ");
             Serial.println(new_brightness);
             _mode_data.brightness = new_brightness;
             for (int i = 0; i < _NUMBER_OF_LEDS * 4; i += 4 ) {
@@ -192,16 +217,18 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
     _mode_data.brightness = 1.0;
     uint16_t sum = 0;
 
-    if (r != 0 || g != 0 || b != 0 || w != 0) {
-        Serial.println("Preferring given color: ");
-    } else {
-        Serial.println("Using random color: ");
-        randomColor(r, g, b);
+    if (modeUsesSpecificColor(new_mode)) {
+        if (r != 0 || g != 0 || b != 0 || w != 0) {
+            Serial.println("Using given color: ");
+        } else {
+            Serial.println("Using random color: ");
+            randomColor(r, g, b);
+        }
+        Serial.print("   R: "); Serial.println(r);
+        Serial.print("   G: "); Serial.println(g);
+        Serial.print("   B: "); Serial.println(b);
+        Serial.print("   W: "); Serial.println(w);
     }
-    Serial.print("   R: "); Serial.println(r);
-    Serial.print("   G: "); Serial.println(g);
-    Serial.print("   B: "); Serial.println(b);
-    Serial.print("   W: "); Serial.println(w);
 
     switch (_mode) {
 
@@ -315,7 +342,7 @@ inline void updateData() {
     uint16_t sum = 0;
     _mode_data.phase += 0.01;
 
-    // Null the phase after 1000*2*Pi to keep things predictable.
+    // Null the phase after 1000*2*PI to keep things predictable.
     if (_mode_data.phase > 6283.1) {
         _mode_data.phase = 0.0;
     }
