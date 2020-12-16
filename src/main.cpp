@@ -315,6 +315,11 @@ inline void updateData() {
     uint16_t sum = 0;
     _mode_data.phase += 0.01;
 
+    // Null the phase after 1000*2*Pi to keep things predictable.
+    if (_mode_data.phase > 6283.1) {
+        _mode_data.phase = 0.0;
+    }
+
     switch (_mode) {
 
         case OFF:
