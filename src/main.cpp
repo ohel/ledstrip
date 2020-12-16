@@ -12,6 +12,7 @@
 #include "ledsetup.h"
 #ifndef _LED_SETUP
 // For different kinds of LED strip setups, put the next three lines in ledsetup.h.
+// The first LED index is normally 0, but if using the "sacrificial LED" technique to boost the IO voltage, it's 1.
 #define _LED_SETUP
 const uint8_t _FIRST_LED_INDEX = 0;
 const uint8_t _NUMBER_OF_LEDS = 60;
@@ -107,7 +108,7 @@ static _MODE getModeEnum(String s) {
 
 }
 
-// Maps enums to correspongind strings.
+// Maps enums to corresponding strings.
 static String getModeString(_MODE m) {
 
     switch (m) {
@@ -178,7 +179,7 @@ void randomColor(uint8_t &r, uint8_t &g, uint8_t &b) {
 void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uint8_t w = 0) {
 
     Serial.print("Switching mode to: ");
-    Serial.println(getModeString(_mode));
+    Serial.println(getModeString(new_mode));
 
     for (int i = 0; i < _NUMBER_OF_LEDS; i++ ) {
         setLEDData(i, 0, 0, 0, 0);
@@ -407,6 +408,7 @@ void setupWifi() {
         Serial.println(_WIFI_IP.toString());
         WiFi.config(_WIFI_IP, _WIFI_GATEWAY, subnet);
     }
+    WiFi.hostname(_WIFI_HOSTNAME);
 
     WiFi.begin(_WIFI_SSID, _WIFI_PASSWORD);
     int timeout = 0;
@@ -421,6 +423,8 @@ void setupWifi() {
     if (WiFi.status() == WL_CONNECTED) {
         Serial.print("WiFi connected using IP address: ");
         Serial.println(WiFi.localIP());
+        Serial.print("Hostname: ");
+        Serial.println(WiFi.hostname());
     }
 
     _SERVER.on("/", HTTP_GET, [](){
@@ -446,7 +450,7 @@ void setupWifi() {
     _SERVER.begin();
     Serial.println("Server is running.");
 
-    if (!MDNS.begin(_WIFI_MDNS)) {
+    if (!MDNS.begin(_WIFI_HOSTNAME)) {
         Serial.println("Failed to start mDNS responder.");
     } else {
         Serial.println("Started mDNS responder.");
