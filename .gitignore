@@ -5,3 +5,4 @@ src/index.h
 src/ledsetup.h
 src/wificonfig.h
 web/*.cfg
+configs

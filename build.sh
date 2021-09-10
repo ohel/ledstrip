@@ -39,5 +39,8 @@ xxd -i web/favicon.ico > src/favicon.h
 
 [ -e web/title.cfg ] && [ -e $tmpfile ] && cp $tmpfile web/index.html && rm $tmpfile 2>/dev/null
 
+[ ! "$(lsmod | grep usbserial)" ] && echo "Note: usbserial module is not loaded. Uploading may not work."
+[ ! "$(lsmod | grep ch341)" ] && echo "Note: ch341 module is not loaded. Uploading may not work."
+
 port=$(pio device list | grep -B 2 "VID:PID=$piodev" | head -n 1)
 [ $port ] && pio run -t upload --upload-port $port || pio run
