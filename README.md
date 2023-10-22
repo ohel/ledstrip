@@ -6,4 +6,6 @@ The LED strip used is SK6812. It has strict timing requirements down to 150 ns l
 
 Color and mode of the LEDs can be chosen from a web page served by the device.
 
+A config file `current.json` must be created first. There is a template `default.json` for that purpose.
+
 ![Screenshot](screenshot.png)

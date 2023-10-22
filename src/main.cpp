@@ -1,44 +1,24 @@
-#include "Arduino.h"
-#include "string.h"
+#include <Arduino.h>
+#include <string.h>
+#include "webconfig.h"
 
-#include "ESP8266WiFi.h"
-#include "ESP8266WebServer.h"
-#include "ESP8266mDNS.h"
-
-#include "wificonfig.h"
-#include "index.h"
-#include "favicon.h"
-
-// For different kinds of LED strip setups, define the following three constants in ledsetup.h.
 // The first LED index is normally 0, but if using the "sacrificial LED" technique to boost the IO voltage, it's 1.
-// A current limit of 400mA is usually tolerable by D1 mini powered via USB. For higher values, power it directly from the 5V line.
-#include "ledsetup.h"
-#ifndef _LED_SETUP
-#define _LED_SETUP
-const uint8_t _FIRST_LED_INDEX = 0;
-const uint8_t _NUMBER_OF_LEDS = 60;
-const float _CURRENT_LIMIT_MA = 400;
-#endif
+// A current limit of 400mA is usually tolerable by D1 mini powered via USB. For higher values, power the LEDs directly from the 5V line.
+#include "led_cfg.h"
 
-extern "C" void write(uint8_t* led_val, uint32_t length);
+extern "C" void write(byte* led_val, unsigned long int length);
 
-const char* _INDEX_HTML = reinterpret_cast<char*>(&web_index_html[0]);
-const char* _FAVICON = reinterpret_cast<char*>(&web_favicon_ico[0]);
-const unsigned int _WEB_FAVICON_LEN = web_favicon_ico_len;
-
-ESP8266WebServer _SERVER(80);
-
-const uint8_t _DATA_BYTE_LENGTH = _NUMBER_OF_LEDS * 4;
+const byte _DATA_BYTE_LENGTH = _NUMBER_OF_LEDS * 4;
 // LED_SUM is the sum of all LED values (on a scale 0-255), so e.g. for 4 LEDs/module, 60 modules/strip the maximum sum is 255*4*60=61200.
 // Assuming for each LED the current is 20mA, calculate the safe limit for LED sum based on current limit.
-const uint32_t _LED_SUM_LIMIT = (uint32_t)(_CURRENT_LIMIT_MA * 255.0 / 20); // LED_SUM/255*20mA < I_limit (mA)
+const unsigned long int _LED_SUM_LIMIT = (unsigned long int)(_CURRENT_LIMIT_MA * 255.0 / 20); // LED_SUM/255*20mA < I_limit (mA)
 
 struct LEDStripData {
 
-    uint8_t led_val[_DATA_BYTE_LENGTH] = { 0 };
-    uint8_t init_val[_DATA_BYTE_LENGTH] = { 0 };
-    int led_index = _FIRST_LED_INDEX;
-    int interval = 100;
+    byte led_val[_DATA_BYTE_LENGTH] = { 0 };
+    byte init_val[_DATA_BYTE_LENGTH] = { 0 };
+    unsigned int led_index = _FIRST_LED_INDEX;
+    unsigned int interval = 100;
     float phase_offset[_NUMBER_OF_LEDS] = { 0 };
     float phase = 0.0;
     float brightness = 1.0;
@@ -47,9 +27,9 @@ struct LEDStripData {
 };
 LEDStripData _data;
 
-inline void setInitValues(int index, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uint8_t w = 0, float phase_offset = 0) {
+inline void setInitValues(byte index, byte r = 0, byte g = 0, byte b = 0, byte w = 0, float phase_offset = 0) {
 
-    int i = 4 * index;
+    unsigned int i = 4 * index;
     _data.init_val[i + 0] = g;
     _data.init_val[i + 1] = r;
     _data.init_val[i + 2] = b;
@@ -63,9 +43,9 @@ inline void setInitValues(int index, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0
 
 }
 
-inline void setValues(int index, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uint8_t w = 0) {
+inline void setValues(byte index, byte r = 0, byte g = 0, byte b = 0, byte w = 0) {
 
-    int i = 4 * index;
+    unsigned int i = 4 * index;
     _data.led_val[i + 0] = g;
     _data.led_val[i + 1] = r;
     _data.led_val[i + 2] = b;
@@ -73,7 +53,7 @@ inline void setValues(int index, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, ui
 
 }
 
-const int _GPIO_PIN = 0;
+const byte _GPIO_PIN = D3; // = 0 on D1 mini
 
 enum _MODE {
 
@@ -96,7 +76,7 @@ enum _MODE {
 _MODE _mode;
 
 // Maps strings to corresponding enum.
-static _MODE getModeEnum(String s) {
+_MODE getModeEnum(String s) {
 
     if (s == "HUE_ROTATE_CONSTANT") { return _MODE::HUE_ROTATE_CONSTANT; };
     if (s == "HUE_ROTATE_VARIABLE") { return _MODE::HUE_ROTATE_VARIABLE; };
@@ -117,7 +97,7 @@ static _MODE getModeEnum(String s) {
 }
 
 // Maps enums to corresponding strings.
-static String getModeString(_MODE m) {
+String getModeString(_MODE m) {
 
     switch (m) {
         case HUE_ROTATE_CONSTANT: return "HUE_ROTATE_CONSTANT";
@@ -140,7 +120,7 @@ static String getModeString(_MODE m) {
 }
 
 // Return info on whether a mode uses a specific color value or not.
-static bool modeUsesSpecificColor(_MODE m) {
+bool modeUsesSpecificColor(_MODE m) {
 
     switch (m) {
         case HUE_ROTATE_CONSTANT:
@@ -167,56 +147,51 @@ static bool modeUsesSpecificColor(_MODE m) {
 // Writing the PIN register takes 9 cycles = 112.5 ns @ 80 MHz.
 inline void gpioUp() __attribute__((always_inline));
 void gpioUp() {
-
     GPOS = (1 << _GPIO_PIN);
-
 }
 
 inline void gpioDown() __attribute__((always_inline));
 void gpioDown() {
-
     GPOC = (1 << _GPIO_PIN);
-
 }
 
 // Scale brightness based on LED brightness sum so that current stays within limits.
-inline void scaleBrightness(uint16_t sum) {
-
+inline void scaleBrightness(unsigned int sum) {
     if (sum > _LED_SUM_LIMIT) {
         float new_brightness = _LED_SUM_LIMIT / (float)sum;
         if (new_brightness < _data.brightness) {
             Serial.print("Current limit scaling brightness to: ");
             Serial.println(new_brightness);
             _data.brightness = new_brightness;
-            for (int i = 0; i < _NUMBER_OF_LEDS * 4; i += 4 ) {
-                _data.led_val[i + 0] = (uint8_t)(_data.led_val[i + 0] * new_brightness);
-                _data.led_val[i + 1] = (uint8_t)(_data.led_val[i + 1] * new_brightness);
-                _data.led_val[i + 2] = (uint8_t)(_data.led_val[i + 2] * new_brightness);
-                _data.led_val[i + 3] = (uint8_t)(_data.led_val[i + 3] * new_brightness);
+            for (byte i = 0; i < _NUMBER_OF_LEDS * 4; i += 4 ) {
+                _data.led_val[i + 0] = (byte)(_data.led_val[i + 0] * new_brightness);
+                _data.led_val[i + 1] = (byte)(_data.led_val[i + 1] * new_brightness);
+                _data.led_val[i + 2] = (byte)(_data.led_val[i + 2] * new_brightness);
+                _data.led_val[i + 3] = (byte)(_data.led_val[i + 3] * new_brightness);
             }
         }
     }
 
 }
 
-void randomColor(uint8_t &r, uint8_t &g, uint8_t &b) {
-    uint8_t max_rgb;
+void randomColor(byte &r, byte &g, byte &b) {
+    byte max_rgb;
     r = random(256);
     g = random(256);
     b = random(256);
     max_rgb = max(r, max(g, b));
-    r = (uint8_t) r * 255.0 / max_rgb;
-    g = (uint8_t) g * 255.0 / max_rgb;
-    b = (uint8_t) b * 255.0 / max_rgb;
+    r = (byte) r * 255.0 / max_rgb;
+    g = (byte) g * 255.0 / max_rgb;
+    b = (byte) b * 255.0 / max_rgb;
 }
 
-void hueToRGB(float hue, uint8_t &r, uint8_t &g, uint8_t &b) {
+void hueToRGB(float hue, byte &r, byte &g, byte &b) {
     hue /= 60.0;
-    int h_int = (int) hue;
-    float h_frac = hue - h_int;
-    uint8_t q = 255 * (1 - h_frac);
-    uint8_t t = 255 * (1 - (1 - h_frac));
-    switch (h_int) {
+    unsigned int hue_integer = (unsigned int) hue;
+    float hue_fraction = hue - hue_integer;
+    byte q = 255 * (1 - hue_fraction);
+    byte t = 255 * (1 - (1 - hue_fraction));
+    switch (hue_integer) {
         case 0:  r = 255; g = t;   b = 0; break;
         case 1:  r = q;   g = 255; b = 0; break;
         case 2:  r = 0;   g = 255; b = t; break;
@@ -226,7 +201,7 @@ void hueToRGB(float hue, uint8_t &r, uint8_t &g, uint8_t &b) {
     }
 }
 
-void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uint8_t w = 0) {
+void switchMode(_MODE new_mode, byte r = 0, byte g = 0, byte b = 0, byte w = 0) {
 
     Serial.print("Switching mode to: ");
     Serial.println(getModeString(new_mode));
@@ -237,7 +212,7 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
     _data.special = false;
     _data.brightness = 1.0;
     _data.interval = 1000;
-    uint16_t sum = 0;
+    unsigned int sum = 0;
 
     if (modeUsesSpecificColor(new_mode)) {
         if (r != 0 || g != 0 || b != 0 || w != 0) {
@@ -255,7 +230,7 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
     switch (_mode) {
 
         case OFF:
-            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+            for (byte i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
                 setInitValues(i);
             }
             break;
@@ -263,14 +238,14 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
         case HUE_ROTATE_CONSTANT:
         case HUE_ROTATE_VARIABLE:
             _data.interval = 10;
-            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+            for (byte i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
                 setInitValues(i, 0, 255, 255);
             }
             sum = (_NUMBER_OF_LEDS - _FIRST_LED_INDEX) * 255;
             break;
 
         case SINGLE_COLOR_CONSTANT:
-            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+            for (byte i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
                 setInitValues(i, r, g, b);
             }
             sum = (_NUMBER_OF_LEDS - _FIRST_LED_INDEX) * (r + g + b);
@@ -278,7 +253,7 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
 
         case SINGLE_COLOR_BOUNCE:
             _data.interval = 25;
-            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+            for (byte i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
                 setInitValues(i, r, g, b);
                 setValues(i);
             }
@@ -286,28 +261,28 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
 
         case SINGLE_COLOR_GLOW:
             _data.interval = 10;
-            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+            for (byte i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
                 setInitValues(i, r, g, b, 0, PI * (i - _FIRST_LED_INDEX) / (float) _NUMBER_OF_LEDS);
             }
             break;
 
         case REAL_WHITE_GLOW:
             _data.interval = 10;
-            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+            for (byte i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
                 setInitValues(i, 0, 0, 0, 0, PI * (i - _FIRST_LED_INDEX) / (float) _NUMBER_OF_LEDS);
             }
             break;
 
         case MULTICOLOR_TWINKLE:
             _data.interval = 10;
-            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+            for (byte i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
                 setInitValues(i, random(256), random(256), random(256), random(256), PI * 0.01 * random(101));
             }
             break;
 
         case SINGLE_COLOR_TWINKLE:
             _data.interval = 10;
-            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+            for (byte i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
                 setInitValues(i, r, g, b, 0, PI * 0.01 * random(101));
             }
             break;
@@ -315,7 +290,7 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
         case MULTICOLOR_SINGLE_TWINKLE:
         case SINGLE_COLOR_SINGLE_TWINKLE:
             _data.interval = 100;
-            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+            for (byte i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
                 if (_mode == MULTICOLOR_SINGLE_TWINKLE) {
                     randomColor(r, g, b);
                 }
@@ -325,21 +300,21 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
             break;
 
         case REAL_WHITE_CONSTANT:
-            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+            for (byte i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
                 setInitValues(i, 0, 0, 0, 255);
             }
             sum = (_NUMBER_OF_LEDS - _FIRST_LED_INDEX) * 255;
             break;
 
         case REAL_WHITE_CONSTANT_50:
-            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i += 2) {
+            for (byte i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i += 2) {
                 setInitValues(i, 0, 0, 0, 255);
             }
             sum = (_NUMBER_OF_LEDS - _FIRST_LED_INDEX) * 255 / 2;
             break;
 
         case RGB_WHITE_CONSTANT:
-            for (int i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
+            for (byte i = _FIRST_LED_INDEX; i < _NUMBER_OF_LEDS; i++ ) {
                 setInitValues(i, 255, 255, 255, 0);
             }
             sum = (_NUMBER_OF_LEDS - _FIRST_LED_INDEX) * 3 * 255;
@@ -355,13 +330,13 @@ void switchMode(_MODE new_mode, uint8_t r = 0, uint8_t g = 0, uint8_t b = 0, uin
 
 inline void updateData() {
 
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-    uint8_t w;
-    int i;
+    byte r;
+    byte g;
+    byte b;
+    byte w;
+    unsigned int i;
     double br;
-    uint16_t sum = 0;
+    unsigned int sum = 0;
     _data.phase += 0.01;
 
     // Null the phase after 1000*2*PI to keep things predictable.
@@ -376,8 +351,8 @@ inline void updateData() {
 
         case HUE_ROTATE_VARIABLE:
             _data.interval += _data.special ? random(10) : -random(10);
-            _data.interval = max(1, _data.interval);
-            if (random(200) < _data.interval) {
+            _data.interval = max(1, (int)_data.interval);
+            if ((unsigned int)random(200) < _data.interval) {
                 _data.special = !_data.special;
             }
         case HUE_ROTATE_CONSTANT:
@@ -385,7 +360,7 @@ inline void updateData() {
                 _data.phase = 0.0;
             }
             hueToRGB(_data.phase * 10.0, r, g, b);
-            for (int n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++ ) {
+            for (byte n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++ ) {
                 setValues(n, r, g, b);
             }
             sum = (_NUMBER_OF_LEDS - _FIRST_LED_INDEX) * (r + g + b);
@@ -398,18 +373,18 @@ inline void updateData() {
             _data.special |= _data.led_index == _NUMBER_OF_LEDS - 1;
             _data.special &= _data.led_index != _FIRST_LED_INDEX;
             i = 4 * _data.led_index;
-            g = (uint8_t)(_data.init_val[i + 0]);
-            r = (uint8_t)(_data.init_val[i + 1]);
-            b = (uint8_t)(_data.init_val[i + 2]);
-            w = (uint8_t)(_data.init_val[i + 3]);
+            g = (byte)(_data.init_val[i + 0]);
+            r = (byte)(_data.init_val[i + 1]);
+            b = (byte)(_data.init_val[i + 2]);
+            w = (byte)(_data.init_val[i + 3]);
             setValues(_data.led_index, r, g, b, w);
             sum = r + g + b + w;
             break;
 
         case REAL_WHITE_GLOW:
-            for (int n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++) {
+            for (byte n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++) {
                 br = pow((float)sin(_data.phase + _data.phase_offset[n]), 6) * _data.brightness;
-                w = (uint8_t)(br * 255);
+                w = (byte)(br * 255);
                 setValues(n, 0, 0, 0, w);
                 sum += w;
             }
@@ -418,13 +393,13 @@ inline void updateData() {
         case SINGLE_COLOR_GLOW:
         case MULTICOLOR_TWINKLE:
         case SINGLE_COLOR_TWINKLE:
-            for (int n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++) {
+            for (byte n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++) {
                 br = pow((float)sin(_data.phase + _data.phase_offset[n]), 6) * _data.brightness;
                 i = 4 * n;
-                g = (uint8_t)(br * _data.init_val[i + 0]);
-                r = (uint8_t)(br * _data.init_val[i + 1]);
-                b = (uint8_t)(br * _data.init_val[i + 2]);
-                w = (uint8_t)(br * _data.init_val[i + 3]);
+                g = (byte)(br * _data.init_val[i + 0]);
+                r = (byte)(br * _data.init_val[i + 1]);
+                b = (byte)(br * _data.init_val[i + 2]);
+                w = (byte)(br * _data.init_val[i + 3]);
                 setValues(n, r, g, b, w);
                 sum += r + g + b + w;
             }
@@ -432,7 +407,7 @@ inline void updateData() {
 
         case MULTICOLOR_SINGLE_TWINKLE:
         case SINGLE_COLOR_SINGLE_TWINKLE:
-            for (int n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++) {
+            for (byte n = _FIRST_LED_INDEX; n < _NUMBER_OF_LEDS; n++) {
                 _data.phase_offset[n] += 0.01;
                 if (_data.phase_offset[n] > 10 * PI) {
                     if (_mode == MULTICOLOR_SINGLE_TWINKLE) {
@@ -444,10 +419,10 @@ inline void updateData() {
                 } else if (_data.phase_offset[n] > 9 * PI) {
                     br = pow((float)sin(_data.phase_offset[n]), 4) * _data.brightness;
                     i = 4 * n;
-                    g = (uint8_t)(br * _data.init_val[i + 0]);
-                    r = (uint8_t)(br * _data.init_val[i + 1]);
-                    b = (uint8_t)(br * _data.init_val[i + 2]);
-                    w = (uint8_t)(br * _data.init_val[i + 3]);
+                    g = (byte)(br * _data.init_val[i + 0]);
+                    r = (byte)(br * _data.init_val[i + 1]);
+                    b = (byte)(br * _data.init_val[i + 2]);
+                    w = (byte)(br * _data.init_val[i + 3]);
                     setValues(n, r, g, b, w);
                     sum += r + g + b + w;
                 }
@@ -466,85 +441,23 @@ inline void updateData() {
 
 }
 
-void setupWifi() {
-
-    IPAddress subnet(255, 255, 255, 0);
-    WiFi.mode(WIFI_STA);
-
-    Serial.println("");
-    if (_WIFI_IP == INADDR_NONE) {
-        Serial.println("Using dynamic IP address.");
-    } else {
-        Serial.print("Using static IP address: ");
-        Serial.println(_WIFI_IP.toString());
-        WiFi.config(_WIFI_IP, _WIFI_GATEWAY, subnet);
-    }
-    WiFi.hostname(_WIFI_HOSTNAME);
-
-    WiFi.begin(_WIFI_SSID, _WIFI_PASSWORD);
-    int timeout = 0;
-    Serial.print("Connecting to: ");
-    Serial.println(_WIFI_SSID);
-    while (WiFi.status() != WL_CONNECTED && timeout < 10) {
-        delay(1000);
-        Serial.print(".");
-        timeout++;
-    }
-    Serial.println("");
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.print("WiFi connected using IP address: ");
-        Serial.println(WiFi.localIP());
-        Serial.print("Hostname: ");
-        Serial.println(WiFi.hostname());
-    }
-
-    _SERVER.on("/", HTTP_GET, [](){
-        Serial.println("GET: /");
-        _SERVER.send(200, "text/html", _INDEX_HTML);
-    });
-    _SERVER.on("/_FAVICON.ico", HTTP_GET, [](){
-        Serial.println("GET: /_FAVICON.ico");
-        _SERVER.send_P(200, "image/x-icon", _FAVICON, _WEB_FAVICON_LEN);
-    });
-    _SERVER.on("/", HTTP_POST, [](){
-        Serial.println("POST: /");
-        _SERVER.send(200, "text/plain", "");
-        String mode = _SERVER.arg("mode");
-        uint8_t r = (uint8_t) _SERVER.arg("r").toInt();
-        uint8_t g = (uint8_t) _SERVER.arg("g").toInt();
-        uint8_t b = (uint8_t) _SERVER.arg("b").toInt();
-        Serial.print("Request mode: ");
-        Serial.println(mode);
-        switchMode(getModeEnum(mode), r, g, b);
-    });
-
-    _SERVER.begin();
-    Serial.println("Server is running.");
-
-    if (!MDNS.begin(_WIFI_HOSTNAME)) {
-        Serial.println("Failed to start mDNS responder.");
-    } else {
-        Serial.println("Started mDNS responder.");
-    }
-
+void requestMode(String new_mode, byte r, byte g, byte b) {
+    Serial.print("Request mode: ");
+    Serial.println(new_mode);
+    switchMode(getModeEnum(new_mode), r, g, b);
 }
 
 void setup() {
-
     Serial.begin(115200);
+    delay(500);
     pinMode(_GPIO_PIN, OUTPUT);
-
-    setupWifi();
-
+    WebConfig::setupWifi(requestMode);
     switchMode(REAL_WHITE_CONSTANT_50);
-
 }
 
 void loop() {
-
-    _SERVER.handleClient();
+    WebConfig::handleClient();
     updateData();
     write(_data.led_val, _DATA_BYTE_LENGTH);
     delay(_data.interval);
-
 }

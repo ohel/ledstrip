@@ -1,8 +1,7 @@
 .pio
-.pioenvs
 src/favicon.h
-src/index.h
-src/ledsetup.h
-src/wificonfig.h
-web/*.cfg
-configs
+src/index_html.h
+src/led_cfg.h
+src/wifi_cfg.h
+configs/*.json
+!configs/default.json
