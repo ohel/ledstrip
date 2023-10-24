@@ -21,7 +21,7 @@ namespace WebConfig {
         IPAddress subnet(255, 255, 255, 0);
 
         WiFi.mode(WIFI_STA);
-        if (_wifi_ip == INADDR_NONE) {
+        if (_wifi_ip.toString() == INADDR_NONE.toString()) {
             Serial.println("Using dynamic IP address.");
         } else {
             WiFi.config(_wifi_ip, _wifi_gateway, subnet);
